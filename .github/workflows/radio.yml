@@ -1,0 +1,44 @@
+name: 漢文タイムトラベル 音声制作
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['episode.json','build_radio.py','site/index.html','.github/workflows/radio.yml']
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+concurrency:
+  group: kanbun-pages
+  cancel-in-progress: false
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: |
+          python -m pip install 'requests>=2.30,<3' 'pydub>=0.25,<1'
+          sudo apt-get update -qq && sudo apt-get install -y ffmpeg
+          docker pull voicevox/voicevox_engine:cpu-latest
+          docker run -d --rm -p 127.0.0.1:50021:50021 voicevox/voicevox_engine:cpu-latest
+          for i in $(seq 1 90); do curl -fsS http://127.0.0.1:50021/speakers >/dev/null && break; sleep 5; done
+      - run: python build_radio.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: kanbun-radio-episode-1
+          path: |
+            site/episode.mp3
+            site/episode.json
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v4
+        with:
+          path: site
+      - uses: actions/deploy-pages@v4
+        id: deploy
